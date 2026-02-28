@@ -2,21 +2,27 @@
 
 Make abliterated models using transformers, easy and fast.
 
+[🇨🇳 跳转至中文说明 (Jump to Chinese section)](#中文说明)
+
 ## Introduction
-
-Update:
-
-- Supported toggle betwenn biprojection and norm-preserving abliteration.
-- Supported [Norm-Preserving Biprojected Abliteration](https://huggingface.co/blog/grimjim/norm-preserving-biprojected-abliteration).
 
 There exist some directions that make LLMs to refuse users' input. Abliteration is a technique that can calculate the most significant refusal directions with harmful and harmless prompts, and then remove them from the model. This is a crude, proof-of-concept implementation to remove refusals from an LLM model without using TransformerLens.
 
-The code has been tested on Llama-3.2, Qwen2.5-Coder, Ministral-8b.
+The code has been tested on Llama-3.2, Qwen2.5-Coder, Ministral-8b, and Qwen3.5 MoE models.
 
-VRAM/RAM requirements: This repository has been making efforts to reduce VRAM usage. You can abliterate whatever model you want, as long as it fits in your VRAM. Loading model in 4-bit precision using bitsandbytes is recommended for large models if you have limited VRAM. However, I always assume that you have enough memory to load the **bf16** model.
+VRAM/RAM requirements: This repository has been making efforts to reduce VRAM usage. You can abliterate whatever model you want, as long as it fits in your VRAM. Loading model in 4-bit/8-bit precision using bitsandbytes is recommended for large models if you have limited VRAM. However, I always assume that you have enough memory to load the **bf16** model.
 
 > [!NOTE]
 > Abliteration is not uncensorment. Though abliterated, it doesn't necessarily mean the model is completely uncensored, it simply will not explicitly refuse you, theoretically.
+
+## Updates & New Features (2026-02-28)
+- **Qwen3.5-35B-A3B Support**: Validated specific ablation and inference for hybrid Mixture-of-Experts (MoE) architectures on top of existing ones.
+- **Mac Apple Silicon Optimization**: Built-in monkey patch to resolve PyTorch MPS backend compatibility bug with `torch.histc`, enabling MoE on macOS devices natively!
+- **CUDA Acceleration Mode**: Added an independent `config_cuda.yaml` along with `flash_attention_2` integration and `8-bit` quantized loading support to optimize hardware performance dynamically.
+- **1-Click Cloud Deployment**: Introduced `abliteration_cloud_deploy.ipynb` to automate pulling, testing, abliteration, reading creation, and final Hub uploading flow completely from inside Colab/Jupyter notebook.
+- **Previous Fixes**:
+  - Supported toggle between biprojection and norm-preserving abliteration.
+  - Supported [Norm-Preserving Biprojected Abliteration](https://huggingface.co/blog/grimjim/norm-preserving-biprojected-abliteration).
 
 ## Usage
 
@@ -25,18 +31,22 @@ VRAM/RAM requirements: This repository has been making efforts to reduce VRAM us
 Clone the repository:
 
 ```shell
-git clone https://github.com/Orion-zhen/abliteration.git && cd abliteration
+git clone https://github.com/cs2764/abliteration.git && cd abliteration
 ```
 
-Then install dependencies:
+Then install dependencies with virtual environments (use `uv` if provided):
 
 ```shell
-pip install -r requirements.txt # or requirements.rocm.txt if you have AMD GPU
+uv venv .venv
+source .venv/bin/activate
+uv pip install -r requirements.txt # or requirements.rocm.txt if you have AMD GPU
 ```
 
 ### Configuration
 
-The `abliterate.py` script needs a configuration file to run. You can find an example in `config.example.yaml`.
+The `abliterate.py` script needs a configuration file to run. 
+- You can find an example for standard testing in `config.example.yaml`.
+- For specific **NVIDIA Cuda** utilization (along with explicit 8-bit support), refer to `config_cuda.yaml`.
 
 ### Run
 
@@ -61,7 +71,6 @@ python compare.py -a /path/to/model/a -b /path/to/model/b
 ## Methodology
 
 ### Simple
-
 The standard ablation method. It calculates the outer product of the refusal direction and subtracts it from the weight matrix. This removes the component of the weights that contributes to the refusal direction.
 
 $$ W_{new} = W - \alpha \cdot (r \cdot r^T) W $$
@@ -69,24 +78,19 @@ $$ W_{new} = W - \alpha \cdot (r \cdot r^T) W $$
 Where $W$ is the weight matrix, $\alpha$ is the scaling factor, and $r$ is the refusal direction. This method does not preserve the norm of the weights.
 
 ### Biprojection
-
-This method improves upon the simple approach by ensuring that the refusal direction is orthogonal to a "harmless" direction. It calculates a harmless mean vector from non-refusal data and removes any component of the refusal direction that overlaps with this harmless direction.
-
-This prevents the ablation from damaging capabilities that are shared between harmful and harmless queries.
+This method improves upon the simple approach by ensuring that the refusal direction is orthogonal to a "harmless" direction. It calculates a harmless mean vector from non-refusal data and removes any component of the refusal direction that overlaps with this harmless direction. This prevents the ablation from damaging capabilities that are shared between harmful and harmless queries.
 
 ### Norm-Preserving
-
 Instead of directly modifying the weights, it decomposes the weight matrix into magnitude and direction. The refusal direction is ablated only from the directional component, and the result is re-normalized to ensure the weights stay on the unit hypersphere before recombining with the original magnitudes.
 
 ### Full
-
 Biprojection + Norm-Preserving.
 
 ## Limitations
 
 - The harmful/harmless prompt in this repository is not optimized. Result generated by them may not be optimal.
-- The code haven't been widely tested.
-- There will be occasions that modified model includes `NaN` or `Inf` values (e.g. gemma3-4b-it). This is a known issue and I don't know how to fix it.
+- The code haven't been widely tested in every variation.
+- There will be occasions that modified model includes `NaN` or `Inf` values (e.g. gemma3-4b-it). This is a known issue.
 
 ## Credits
 
@@ -95,3 +99,72 @@ Biprojection + Norm-Preserving.
 - [Sumandora/remove-refusals-with-transformers](https://github.com/Sumandora/remove-refusals-with-transformers)
 - [AUGMXNT/deccp](https://github.com/AUGMXNT/deccp)
 - [huihui-ai](https://huggingface.co/huihui-ai)
+- Originally based on / forked from [Orion-zhen/abliteration](https://github.com/Orion-zhen/abliteration).
+
+---
+
+# 中文说明
+
+[🇬🇧 Back to English](#abliteration)
+
+## 介绍
+
+当前普遍存在一些干预方向，导致大语言模型频繁拒绝用户的输入。Abliteration 是一种干预提取技术，通过有害与无害提示词推算出其在模型架构下最显著的拒答方向特征，随后从基底模型原生权重矩阵中抹去这部分约束方向。这是一个完全自研的框架项目，使得直接剥离模型拒答特征无需通过庞大的 TransformerLens 即可实现。
+
+当前仓库在 Llama-3.2, Qwen2.5-Coder, Ministral-8b, 以及混元 MoE 的 Qwen3.5 身上测试通过。
+
+显存和硬件需求：本仓库尽最大努力在减少总体显存开销。只要您的显卡能够吞下加载该模型所需的资源，你就可以用工具解封它。在资源受限的情况下执行大参数模型推理，强烈推荐依赖 `bitsandbytes` 以 4-bit 甚至 8-bit 的格式启动。
+
+> [!NOTE]
+> Abliteration 并非彻头彻尾的“解除审查”（uncensorment）。通过技术削减参数它只意味着这个模型在理论实现上不会直接明确拒绝您，但知识库并不一定无死角。
+
+## 最新更新与功能追加 (2026-02-28)
+- **支持架构 Qwen3.5-35B-A3B 支持**：成功地基于现有代码添加并验证了这套复杂的混合 MoE 模型的消融与处理运算过程。
+- **Mac Apple Silicon 优化**：内嵌打上了处理 PyTorch MPS 后端无法对整数类型的张量使用 `torch.histc` 进行直方图加速运算时的兼容性修复补丁。使得带有 Apple M 芯片环境可以在本地无缝运行！
+- **CUDA 极速加速模式**：为主流带 Nvidia 显卡的电脑引入了独立的 `config_cuda.yaml` 环境配置，结合了原生的 Flash Attention 以及直接整合 `8-bit` 内存加载技术。
+- **一键运行部署脚本**：新增了专门给云算力服务（如 Jupyter/Colab 等环境）封装的快速串通代码 `abliteration_cloud_deploy.ipynb`。一键自动化走完模型拉取、Abliterated 训练并最终通过 HfApi 推送到个人的 Hugging Face Hub！
+
+## 使用方式
+
+### 准备环境
+
+第一阶段去仓库克隆代码：
+
+```shell
+git clone https://github.com/cs2764/abliteration.git && cd abliteration
+```
+
+安装运行前所需配置（严禁修改自带的隔离环境逻辑）：
+
+```shell
+uv venv .venv
+source .venv/bin/activate
+# Windows下为 .venv\Scripts\activate
+uv pip install -r requirements.txt # 或者使用 requirements.rocm.txt 应对 AMD GPU
+```
+
+### 加载配置
+
+通过向命令行提供 YAML 的配置清单来执行核心逻辑：
+- 在普通测试下您可以基于 `config.example.yaml` 复制一份修改。
+- 专门用于 **NVIDIA 显卡加速**以及大规模训练的场景，请调用新增自带的 `config_cuda.yaml`。
+
+### 运行
+
+启动自动破限及消融：
+
+```shell
+python abliterate.py config.yaml
+```
+
+用处理好的模型开启新交互：
+
+```shell
+python chat.py -m /您的/新模型/路径
+```
+
+对比两个版本间的区别：
+
+```shell
+python compare.py -a /原版路径 -b /处理后的新版本路径
+```

@@ -7,6 +7,14 @@ from transformers import (
 from argparse import ArgumentParser
 import torch
 
+# Monkey-patch for PyTorch MPS bug with torch.histc on integer tensors (used in MoE routing)
+_original_histc = torch.histc
+def _mps_histc(input, bins=100, min=0, max=0, *, out=None):
+    if input.device.type == "mps" and input.dtype in [torch.int8, torch.int16, torch.int32, torch.int64]:
+        return _original_histc(input.float(), bins=bins, min=min, max=max, out=out)
+    return _original_histc(input, bins=bins, min=min, max=max, out=out)
+torch.histc = _mps_histc
+
 parser = ArgumentParser()
 parser.add_argument(
     "--model", "-m", type=str, required=True, help="Path to model directory"
@@ -107,12 +115,20 @@ if __name__ == "__main__":
             continue
         conversation.append({"role": "user", "content": prompt})
         toks = tokenizer.apply_chat_template(
-            conversation=conversation, add_generation_prompt=True, return_tensors="pt"
+            conversation=conversation, add_generation_prompt=True, return_tensors="pt", return_dict=True
         )
+        toks = toks.to(model.device)
+        
         gen = model.generate(
-            toks.to(model.device), streamer=streamer, max_new_tokens=args.max_new_tokens
+            **toks, streamer=streamer, max_new_tokens=args.max_new_tokens
         )
+        
+        if hasattr(toks, "input_ids"):
+            input_len = toks["input_ids"].shape[1]
+        else:
+            input_len = toks.shape[1]
+            
         decoded = tokenizer.batch_decode(
-            gen[0][len(toks[0]) :], skip_special_tokens=True
+            gen[:, input_len:], skip_special_tokens=True
         )
         conversation.append({"role": "assistant", "content": "".join(decoded)})

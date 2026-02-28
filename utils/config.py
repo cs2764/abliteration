@@ -10,6 +10,7 @@ class InferenceConfig:
     batch_size: int = 4
     max_length: int = 512
     flash_attn: bool = False
+    load_in_8bit: bool = False
 
 
 @dataclass
@@ -72,6 +73,7 @@ def load_config(config_path: str) -> ModelConfig:
         batch_size=inf_raw.get("batch_size", 4),
         max_length=max_len,
         flash_attn=inf_raw.get("flash_attn", False),
+        load_in_8bit=inf_raw.get("load_in_8bit", False),
     )
 
     # Parse Measurements Section
@@ -124,6 +126,7 @@ def print_config(config: ModelConfig):
     Output.key_value("Batch Size", str(config.inference.batch_size))
     Output.key_value("Max Length", str(config.inference.max_length))
     Output.key_value("Flash Attention", str(config.inference.flash_attn))
+    Output.key_value("Load in 8-bit", str(config.inference.load_in_8bit))
 
     Output.subheader("Measurements")
     Output.key_value("Load Path", config.measurements.load_path or "N/A")

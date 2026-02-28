@@ -102,7 +102,7 @@ def modify_shard_weights(
         except (ValueError, IndexError):
             continue
 
-        target_modules = ["o_proj", "down_proj"]  # Target modules
+        target_modules = ["o_proj", "down_proj", "out_proj"]  # Target modules including hybrid Mamba/Attention
         is_target = any(m in key for m in target_modules) and key.endswith(".weight")
 
         if is_target:

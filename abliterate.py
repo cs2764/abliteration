@@ -5,6 +5,14 @@ import shutil
 import os
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
+# Monkey-patch for PyTorch MPS bug with torch.histc on integer tensors (used in MoE routing)
+_original_histc = torch.histc
+def _mps_histc(input, bins=100, min=0, max=0, *, out=None):
+    if input.device.type == "mps" and input.dtype in [torch.int8, torch.int16, torch.int32, torch.int64]:
+        return _original_histc(input.float(), bins=bins, min=min, max=max, out=out)
+    return _original_histc(input, bins=bins, min=min, max=max, out=out)
+torch.histc = _mps_histc
+
 from utils.output import Output
 from utils.plot import analyze_results
 from utils.math_utils import sparsify_tensor
@@ -33,11 +41,19 @@ def main():
     else:
         # Load Model for Inference
         Output.info(f"Loading model {config.model} for measurement...")
+        # Determine quantization config if 8-bit loading is requested
+        quantization_config = None
+        if getattr(config.inference, "load_in_8bit", False):
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+            Output.info("8-bit quantization enabled for model loading.")
+
         model = AutoModelForCausalLM.from_pretrained(
             config.model,
             dtype="auto",
             trust_remote_code=True,
             device_map="auto",
+            quantization_config=quantization_config,
             attn_implementation=(
                 "flash_attention_2" if config.inference.flash_attn else None
             ),
