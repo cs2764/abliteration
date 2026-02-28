@@ -58,7 +58,7 @@ def welford_gpu_batched_multilayer_float32(
 
         # Process layers with Welford in float32
         for layer_idx in layer_indices:
-            # Cast to float32 for accumulation and move to CPU
+            # Cast to float32 for accumulation and move to CPU immediately to avoid multi-GPU VRAM/device-mismatch issues
             # Shape: [batch, 1, hidden] -> [batch, hidden]
             current_hidden = hidden_states[layer_idx][:, pos, :].to(
                 "cpu", dtype=torch.float32

@@ -13,6 +13,21 @@ def _mps_histc(input, bins=100, min=0, max=0, *, out=None):
     return _original_histc(input, bins=bins, min=min, max=max, out=out)
 torch.histc = _mps_histc
 
+# Monkey-patch for older PyTorch versions lacking set_submodule (required by newer transformers for quantization)
+if not hasattr(torch.nn.Module, "set_submodule"):
+    def _set_submodule(self, target: str, module: torch.nn.Module) -> None:
+        atoms = target.split(".")
+        name = atoms.pop(-1)
+        mod = self
+        for item in atoms:
+            if not hasattr(mod, item):
+                raise AttributeError(f"'{type(mod).__name__}' object has no attribute '{item}'")
+            mod = getattr(mod, item)
+            if not isinstance(mod, torch.nn.Module):
+                raise AttributeError(f"`{item}` is not an nn.Module")
+        setattr(mod, name, module)
+    torch.nn.Module.set_submodule = _set_submodule
+
 from utils.output import Output
 from utils.plot import analyze_results
 from utils.math_utils import sparsify_tensor
